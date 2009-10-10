@@ -1,0 +1,594 @@
+<?php
+/**
+ *  phpdoc
+ *
+ *  @package    phpman
+ *  @author     sotarok
+ *  @license    The MIT License
+ *  @id         $Id$
+ */
+
+require_once 'PEAR/Config.php';
+
+define('E_PHPMAN_NOTFOUND', 1 << 1);
+define('E_PHPMAN_MULTIPAGES', 1 << 2);
+
+class phpman
+{
+    public $pear_config;
+    public $base_dir;
+
+    protected $_pages = null;
+
+    public function __construct()
+    {
+        $this->pear_config = &PEAR_Config::singleton();
+        $this->base_dir = $this->pear_config->get('data_dir') . '/phpman/html/';
+    }
+
+    public static function run($args)
+    {
+        $o = new phpman();
+
+        $page_html = null;
+        try {
+            $page = $o->parseArgs($args);
+            $w = popen("/usr/bin/w3m -T 'text/html' $page", 'w');
+            pclose($w);
+        } catch (Exception $e) {
+            if ($e->getCode() == E_PHPMAN_NOTFOUND) {
+                echo $e->getMessage(), "\n";
+            }
+            else if ($e->getCode() == E_PHPMAN_MULTIPAGES) {
+                $page_html = <<<EOT
+<title>Search results  [phpman]</title>
+<a href="{$o->base_dir}/index.html">PHP Manual</a> &raquo; Search results
+</div>
+<ul>
+EOT;
+                foreach ($o->_pages as $p) {
+                    $page_html .= '<li><a href="' . $p . '">' . basename($p) . '</a></li>';
+                }
+                $page_html .= '</ul>';
+            }
+
+            $w = popen("/usr/bin/w3m -T text/html", "w");
+            fwrite($w, $page_html);
+            pclose($w);
+        }
+    }
+
+    public function parseArgs($args)
+    {
+        $page = 'index.html';
+
+        array_shift($args);
+        if (!empty($args)) {
+            $arg = array_shift($args);
+            $page = $this->searchPage($arg);
+            if ($page === null) {
+                throw new Exception("Page not found.", E_PHPMAN_NOTFOUND);
+            }
+            else if (is_array($page)) {
+                $this->_pages = $page;
+                throw new Exception("Page not found.", E_PHPMAN_MULTIPAGES);
+            }
+        }
+
+        return $this->base_dir . $page;
+    }
+
+    /**
+     *  this behaviour is like to access php.net/function
+     *
+     *  original code is defined in web/error.php
+     *  ref: http://svn.php.net/viewvc/web/php/trunk/error.php?view=markup
+     *
+     *  @sotarok
+     */
+    public function searchPage($arg)
+    {
+        $arg = strtolower($arg);
+        $term = str_replace('_', '-', $arg);
+
+        if ($path = $this->is_known_ini($term)) {
+            return $path;
+        }
+        if ($path = $this->is_known_variable($term)) {
+            return $path;
+        }
+        if ($path = $this->is_known_term($term)) {
+            return $path;
+        }
+
+        // ============================================================================
+        // Define shortcuts for PHP files, manual pages and external redirects
+        $uri_aliases = array (
+            # PHP page shortcuts
+            "download"      => "downloads",
+            "getphp"        => "downloads",
+            "getdocs"       => "download-docs",
+            "documentation" => "docs",
+            "mailinglists"  => "mailing-lists",
+            "mailinglist"   => "mailing-lists",
+            "changelog"     => "ChangeLog-5",
+            "gethelp"       => "support",
+            "help"          => "support",
+            "unsubscribe"   => "unsub",
+            "subscribe"     => "mailing-lists",
+            "logos"         => "download-logos",
+
+            # manual shortcuts
+            "intro"        => "introduction",
+            "whatis"       => "introduction",
+            "whatisphp"    => "introduction",
+            "what_is_php"  => "introduction",
+
+            "windows"      => "install.windows",
+            "win32"        => "install.windows",
+
+            "globals"          => "language.variables.predefined",
+            "register_globals" => "security.globals",
+            "registerglobals"  => "security.globals",
+            "manual/en/security.registerglobals.php" => "security.globals", // fix for 4.3.8 configure
+            "magic_quotes"     => "security.magicquotes",
+            "magicquotes"      => "security.magicquotes",
+            "gd"               => "image",
+            'streams'          => 'book.stream',
+
+            "callback"     => "language.pseudo-types",
+            "number"       => "language.pseudo-types",
+            "mixed"        => "language.pseudo-types",
+            "bool"         => "language.types.boolean",
+            "boolean"      => "language.types.boolean",
+            "int"          => "language.types.integer",
+            "integer"      => "language.types.integer",
+            "float"        => "language.types.float",
+            "string"       => "language.types.string",
+            "heredoc"      => "language.types.string",
+            "<<<"          => "language.types.string",
+            "object"       => "language.types.object",
+            "null"         => "language.types.null",
+
+            "htaccess"     => "configuration.changes",
+            "php_value"    => "configuration.changes",
+
+            "ternary"      => "language.operators.comparison",
+            "instanceof"   => "language.operators.type",
+            "if"           => "language.control-structures",
+            "static"       => "language.variables.scope",
+            "global"       => "language.variables.scope",
+            "@"            => "language.operators.errorcontrol",
+            "&"            => "language.references",
+
+            "tut"          => "tutorial",
+            "tut.php"      => "tutorial", // BC
+
+            "faq.php"      => "faq",      // BC
+            "bugs.php"     => "bugs",     // BC
+            "bugstats.php" => "bugstats", // BC
+            "docs-echm.php"=> "download-docs", // BC
+
+            "odbc"         => "uodbc", // BC
+            "oracle"       => "oci8",
+            "_"            => "function.gettext",
+            "cli"          => "features.commandline",
+
+            "oop4"         => "language.oop",
+            "oop"          => "language.oop5",
+
+            "class"        => "language.oop5.basic",
+            "new"          => "language.oop5.basic",
+            "extends"      => "language.oop5.basic",
+            "clone"        => "language.oop5.cloning",
+            "construct"    => "language.oop5.decon",
+            "destruct"     => "language.oop5.decon",
+            "public"       => "language.oop5.visibility",
+            "private"      => "language.oop5.visibility",
+            "protected"    => "language.oop5.visibility",
+            "abstract"     => "language.oop5.abstract",
+            "interface"    => "language.oop5.interfaces",
+            "interfaces"   => "language.oop5.interfaces",
+            "autoload"     => "language.oop5.autoload",
+            "__autoload"   => "language.oop5.autoload",
+            "language.oop5.reflection" => "book.reflection", // BC
+            "::"           => "language.oop5.paamayim-nekudotayim",
+
+            "__construct"  => "language.oop5.decon",
+            "__destruct"   => "language.oop5.decon",
+            "__call"       => "language.oop5.overloading",
+            "__callstatic" => "language.oop5.overloading",
+            "__get"        => "language.oop5.overloading",
+            "__set"        => "language.oop5.overloading",
+            "__isset"      => "language.oop5.overloading",
+            "__unset"      => "language.oop5.overloading",
+            "__sleep"      => "language.oop5.magic",
+            "__wakeup"     => "language.oop5.magic",
+            "__tostring"   => "language.oop5.magic",
+            "__set_state"  => "language.oop5.magic",
+            "__clone"      => "language.oop5.cloning",
+
+            "throw"        => "language.exceptions",
+            "try"          => "language.exceptions",
+            "catch"        => "language.exceptions",
+            "lsb"          => "language.oop5.late-static-bindings",
+            "namespace"    => "language.namespaces",
+            "use"          => "language.namespaces.using",
+            "iterator"     => "language.oop5.iterations",
+
+            "factory"      => "language.oop5.patterns",
+            "singleton"    => "language.oop5.patterns",
+
+            "news.php"                     => "archive/index", // BC
+            "readme.mirror"                => "mirroring", // BC
+
+            "php5"                         => "language.oop5",
+            "zend_changes.txt"             => "language.oop5", // BC
+            "zend2_example.phps"           => "language.oop5", // BC
+            "zend_changes_php_5_0_0b2.txt" => "language.oop5", // BC
+            "zend-engine-2"                => "language.oop5", // BC
+            "zend-engine-2.php"            => "language.oop5", // BC
+
+            "news_php_5_0_0b2.txt"         => "ChangeLog-5", // BC
+            "news_php_5_0_0b3.txt"         => "ChangeLog-5", // BC
+
+            "manual/about-notes.php" => "manual/add-note",   // BC
+            "software/index.php"     => "software",          // BC
+            "releases.php"           => "releases/index",    // BC
+
+            "update_5_2.txt"         => "migration52",      // BC
+            "readme_upgrade_51.php"  => "migration51",      // BC
+            "internals"              => "internals2",        // BC
+
+            # external shortcut aliases ;)
+            "dochowto"     => "phpdochowto",
+            "projects.php" => "projects", // BC
+
+            # CVS -> SVN
+            "anoncvs.php"   => "svn",
+            "cvs-php.php"   => "svn-php",
+        );
+
+
+        if (isset($uri_aliases[$arg])) {
+            return $uri_aliases[$arg];
+        }
+
+        // lookup files
+        $filename  = 'function.' . $term . '.html';
+        if (file_exists($this->base_dir . $filename)) {
+            return $filename;
+        }
+
+        $files = glob($this->base_dir . '*' . $term . '*.html');
+        if (!empty($files)) {
+            if (count($files) == 1) {
+                return array_shift($files);
+            }
+            else {
+                return $files;
+            }
+        }
+
+        return null;
+    }
+
+    public function is_known_ini ($ini) {
+        $inis = array(
+            'engine'                        => 'apache.configuration.html#ini.engine',
+            'short-open-tag'                => 'ini.core.html#ini.short-open-tag',
+            'asp-tags'                      => 'ini.core.html#ini.asp-tags',
+            'precision'                     => 'ini.core.html#ini.precision',
+            'y2k-compliance'                => 'ini.core.html#ini.y2k-compliance',
+            'output-buffering'              => 'outcontrol.configuration.html#ini.output-buffering',
+            'output-handler'                => 'outcontrol.configuration.html#ini.output-handler',
+            'zlib.output-compression'       => 'zlib.configuration.html#ini.zlib.output-compression',
+            'zlib.output-compression-level' => 'zlib.configuration.html#ini.zlib.output-compression-level',
+            'zlib.output-handler'           => 'zlib.configuration.html#ini.zlib.output-handler',
+            'implicit-flush'                => 'outcontrol.configuration.html#ini.implicit-flush',
+            'allow-call-time-pass-reference'=> 'ini.core.html#ini.allow-call-time-pass-reference',
+            'safe-mode'                     => 'ini.sect.safe-mode.html#ini.safe-mode',
+            'safe-mode-gid'                 => 'ini.sect.safe-mode.html#ini.safe-mode-gid',
+            'safe-mode-include-dir'         => 'ini.sect.safe-mode.html#ini.safe-mode-include-dir',
+            'safe-mode-exec-dir'            => 'ini.sect.safe-mode.html#ini.safe-mode-exec-dir',
+            'safe-mode-allowed-env-vars'    => 'ini.sect.safe-mode.html#ini.safe-mode-allowed-env-vars',
+            'safe-mode-protected-env-vars'  => 'ini.sect.safe-mode.html#ini.safe-mode-protected-env-vars',
+            'open-basedir'                  => 'ini.sect.safe-mode.html#ini.open-basedir',
+            'disable-functions'             => 'ini.sect.safe-mode.html#ini.disable-functions',
+            'disable-classes'               => 'ini.sect.safe-mode.html#ini.disable-classes',
+            'syntax-highlighting'           => 'misc.configuration.html#ini.syntax-highlighting',
+            'ignore-user-abort'             => 'misc.configuration.html#ini.ignore-user-abort',
+            'realpath-cache-size'           => 'ini.core.html#ini.realpath-cache-size',
+            'realpath-cache-ttl'            => 'ini.core.html#ini.realpath-cache-ttl',
+            'expose-php'                    => 'ini.core.html#ini.expose-php',
+            'max-execution-time'            => 'info.configuration.html#ini.max-execution-time',
+            'max-input-time'                => 'info.configuration.html#ini.max-input-time',
+            'max-input-nesting-level'       => 'info.configuration.html#ini.max-input-nesting-level',
+            'memory-limit'                  => 'ini.core.html#ini.memory-limit',
+            'error-reporting'               => 'errorfunc.configuration.html#ini.error-reporting',
+            'display-errors'                => 'errorfunc.configuration.html#ini.display-errors',
+            'display-startup-errors'        => 'errorfunc.configuration.html#ini.display-startup-errors',
+            'log-errors'                    => 'errorfunc.configuration.html#ini.log-errors',
+            'log-errors-max-len'            => 'errorfunc.configuration.html#ini.log-errors-max-len',
+            'ignore-repeated-errors'        => 'errorfunc.configuration.html#ini.ignore-repeated-errors',
+            'ignore-repeated-source'        => 'errorfunc.configuration.html#ini.ignore-repeated-source',
+            'report-memleaks'               => 'errorfunc.configuration.html#ini.report-memleaks',
+            'track-errors'                  => 'errorfunc.configuration.html#ini.track-errors',
+            'xmlrpc-errors'                 => 'errorfunc.configuration.html#ini.xmlrpc-errors',
+            'html-errors'                   => 'errorfunc.configuration.html#ini.html-errors',
+            'docref-root'                   => 'errorfunc.configuration.html#ini.docref-root',
+            'docref-ext'                    => 'errorfunc.configuration.html#ini.docref-ext',
+            'error-prepend-string'          => 'errorfunc.configuration.html#ini.error-prepend-string',
+            'error-append-string'           => 'errorfunc.configuration.html#ini.error-append-string',
+            'error-log'                     => 'errorfunc.configuration.html#ini.error-log',
+            'arg-separator.output'          => 'ini.core.html#ini.arg-separator.output',
+            'arg-separator.input'           => 'ini.core.html#ini.arg-separator.input',
+            'variables-order'               => 'ini.core.html#ini.variables-order',
+            'request-order'                 => 'ini.core.html#ini.request-order',
+            'register-globals'              => 'ini.core.html#ini.register-globals',
+            'register-long-arrays'          => 'ini.core.html#ini.register-long-arrays',
+            'register-argc-argv'            => 'ini.core.html#ini.register-argc-argv',
+            'auto-globals-jit'              => 'ini.core.html#ini.auto-globals-jit',
+            'post-max-size'                 => 'ini.core.html#ini.post-max-size',
+            'magic-quotes-gpc'              => 'info.configuration.html#ini.magic-quotes-gpc',
+            'magic-quotes-runtime'          => 'info.configuration.html#ini.magic-quotes-runtime',
+            'magic-quotes-sybase'           => 'sybase.configuration.html#ini.magic-quotes-sybase',
+            'auto-prepend-file'             => 'ini.core.html#ini.auto-prepend-file',
+            'auto-append-file'              => 'ini.core.html#ini.auto-append-file',
+            'default-mimetype'              => 'ini.core.html#ini.default-mimetype',
+            'default-charset'               => 'ini.core.html#ini.default-charset',
+            'always-populate-raw-post-data' => 'ini.core.html#ini.always-populate-raw-post-data',
+            'include-path'                  => 'ini.core.html#ini.include-path',
+            'doc-root'                      => 'ini.core.html#ini.doc-root',
+            'user-dir'                      => 'ini.core.html#ini.user-dir',
+            'extension-dir'                 => 'ini.core.html#ini.extension-dir',
+            'enable-dl'                     => 'info.configuration.html#ini.enable-dl',
+            'cgi.force-redirect'            => 'ini.core.html#ini.cgi.force-redirect',
+            'cgi.redirect-status-env'       => 'ini.core.html#ini.cgi.redirect-status-env',
+            'cgi.fix-pathinfo'              => 'ini.core.html#ini.cgi.fix-pathinfo',
+            'fastcgi.impersonate'           => 'ini.core.html#ini.fastcgi.impersonate',
+            'cgi.rfc2616-headers'           => 'ini.core.html#ini.cgi.rfc2616-headers',
+            'file-uploads'                  => 'ini.core.html#ini.file-uploads',
+            'upload-tmp-dir'                => 'ini.core.html#ini.upload-tmp-dir',
+            'upload-max-filesize'           => 'ini.core.html#ini.upload-max-filesize',
+            'allow-url-fopen'               => 'filesystem.configuration.html#ini.allow-url-fopen',
+            'allow-url-include'             => 'filesystem.configuration.html#ini.allow-url-include',
+            'from'                          => 'filesystem.configuration.html#ini.from',
+            'user-agent'                    => 'filesystem.configuration.html#ini.user-agent',
+            'default-socket-timeout'        => 'filesystem.configuration.html#ini.default-socket-timeout',
+            'auto-detect-line-endings'      => 'filesystem.configuration.html#ini.auto-detect-line-endings',
+            'date.timezone'                 => 'datetime.configuration.html#ini.date.timezone',
+            'date.default-latitude'         => 'datetime.configuration.html#ini.date.default-latitude',
+            'date.default-longitude'        => 'datetime.configuration.html#ini.date.default-longitude',
+            'date.sunrise-zenith'           => 'datetime.configuration.html#ini.date.sunrise-zenith',
+            'date.sunset-zenith'            => 'datetime.configuration.html#ini.date.sunset-zenith',
+            'filter.default'                => 'filter.configuration.html#ini.filter.default',
+            'filter.default-flags'          => 'filter.configuration.html#ini.filter.default-flags',
+            'sqlite.assoc-case'             => 'sqlite.configuration.html#ini.sqlite.assoc-case',
+            'pcre.backtrack-limit'          => 'pcre.configuration.html#ini.pcre.backtrack-limit',
+            'pcre.recursion-limit'          => 'pcre.configuration.html#ini.pcre.recursion-limit',
+            'pdo-odbc.connection-pooling'   => 'ref.pdo-odbc.html#ini.pdo-odbc.connection-pooling',
+            'phar.readonly'                 => 'phar.configuration.html#ini.phar.readonly',
+            'phar.require-hash'             => 'phar.configuration.html#ini.phar.require-hash',
+            'define-syslog-variables'       => 'network.configuration.html#ini.define-syslog-variables',
+            'smtp'                          => 'mail.configuration.html#ini.smtp',
+            'smtp-port'                     => 'mail.configuration.html#ini.smtp-port',
+            'sendmail-from'                 => 'mail.configuration.html#ini.sendmail-from',
+            'sendmail-path'                 => 'mail.configuration.html#ini.sendmail-path',
+            'sql.safe-mode'                 => 'ini.core.html#ini.sql.safe-mode',
+            'odbc.default-db'               => 'odbc.configuration.html#ini.uodbc.default-db',
+            'odbc.default-user'             => 'odbc.configuration.html#ini.uodbc.default-user',
+            'odbc.default-pw'               => 'odbc.configuration.html#ini.uodbc.default-pw',
+            'odbc.allow-persistent'         => 'odbc.configuration.html#ini.uodbc.allow-persistent',
+            'odbc.check-persistent'         => 'odbc.configuration.html#ini.uodbc.check-persistent',
+            'odbc.max-persistent'           => 'odbc.configuration.html#ini.uodbc.max-persistent',
+            'odbc.max-links'                => 'odbc.configuration.html#ini.uodbc.max-links',
+            'odbc.defaultlrl'               => 'odbc.configuration.html#ini.uodbc.defaultlrl',
+            'odbc.defaultbinmode'           => 'odbc.configuration.html#ini.uodbc.defaultbinmode',
+            'mysql.allow-persistent'        => 'mysql.configuration.html#ini.mysql.allow-persistent',
+            'mysql.max-persistent'          => 'mysql.configuration.html#ini.mysql.max-persistent',
+            'mysql.max-links'               => 'mysql.configuration.html#ini.mysql.max-links',
+            'mysql.default-port'            => 'mysql.configuration.html#ini.mysql.default-port',
+            'mysql.default-socket'          => 'mysql.configuration.html#ini.mysql.default-socket',
+            'mysql.default-host'            => 'mysql.configuration.html#ini.mysql.default-host',
+            'mysql.default-user'            => 'mysql.configuration.html#ini.mysql.default-user',
+            'mysql.default-password'        => 'mysql.configuration.html#ini.mysql.default-password',
+            'mysql.connect-timeout'         => 'mysql.configuration.html#ini.mysql.connect-timeout',
+            'mysql.trace-mode'              => 'mysql.configuration.html#ini.mysql.trace-mode',
+            'mysqli.max-links'              => 'mysqli.configuration.html#ini.mysqli.max-links',
+            'mysqli.default-port'           => 'mysqli.configuration.html#ini.mysqli.default-port',
+            'mysqli.default-socket'         => 'mysqli.configuration.html#ini.mysqli.default-socket',
+            'mysqli.default-host'           => 'mysqli.configuration.html#ini.mysqli.default-host',
+            'mysqli.default-user'           => 'mysqli.configuration.html#ini.mysqli.default-user',
+            'mysqli.default-pw'             => 'mysqli.configuration.html#ini.mysqli.default-pw',
+            'oci8.privileged-connect'       => 'oci8.configuration.html#ini.oci8.privileged-connect',
+            'oci8.max-persistent'           => 'oci8.configuration.html#ini.oci8.max-persistent',
+            'oci8.persistent-timeout'       => 'oci8.configuration.html#ini.oci8.persistent-timeout',
+            'oci8.ping-interval'            => 'oci8.configuration.html#ini.oci8.ping-interval',
+            'oci8.statement-cache-size'     => 'oci8.configuration.html#ini.oci8.statement-cache-size',
+            'oci8.default-prefetch'         => 'oci8.configuration.html#ini.oci8.default-prefetch',
+            'oci8.old-oci-close-semantics'  => 'oci8.configuration.html#ini.oci8.old-oci-close-semantics',
+            'pgsql.allow-persistent'        => 'pgsql.configuration.html#ini.pgsql.allow-persistent',
+            'pgsql.auto-reset-persistent'   => 'pgsql.configuration.html#ini.pgsql.auto-reset-persistent',
+            'pgsql.max-persistent'          => 'pgsql.configuration.html#ini.pgsql.max-persistent',
+            'pgsql.max-links'               => 'pgsql.configuration.html#ini.pgsql.max-links',
+            'pgsql.ignore-notice'           => 'pgsql.configuration.html#ini.pgsql.ignore-notice',
+            'pgsql.log-notice'              => 'pgsql.configuration.html#ini.pgsql.log-notice',
+            'sybct.allow-persistent'        => 'sybase.configuration.html#ini.sybct.allow-persistent',
+            'sybct.max-persistent'          => 'sybase.configuration.html#ini.sybct.max-persistent',
+            'sybct.max-links'               => 'sybase.configuration.html#ini.sybct.max-links',
+            'sybct.min-server-severity'     => 'sybase.configuration.html#ini.sybct.min-server-severity',
+            'sybct.min-client-severity'     => 'sybase.configuration.html#ini.sybct.min-client-severity',
+            'sybct.timeout'                 => 'sybase.configuration.html#ini.sybct.timeout',
+            'bcmath.scale'                  => 'bc.configuration.html#ini.bcmath.scale',
+            'browscap'                      => 'misc.configuration.html#ini.browscap',
+            'session.save-handler'          => 'session.configuration.html#ini.session.save-handler',
+            'session.save-path'             => 'session.configuration.html#ini.session.save-path',
+            'session.use-cookies'           => 'session.configuration.html#ini.session.use-cookies',
+            'session.cookie-secure'         => 'session.configuration.html#ini.session.cookie-secure',
+            'session.use-only-cookies'      => 'session.configuration.html#ini.session.use-only-cookies',
+            'session.name'                  => 'session.configuration.html#ini.session.name',
+            'session.auto-start'            => 'session.configuration.html#ini.session.auto-start',
+            'session.cookie-lifetime'       => 'session.configuration.html#ini.session.cookie-lifetime',
+            'session.cookie-path'           => 'session.configuration.html#ini.session.cookie-path',
+            'session.cookie-domain'         => 'session.configuration.html#ini.session.cookie-domain',
+            'session.cookie-httponly'       => 'session.configuration.html#ini.session.cookie-httponly',
+            'session.serialize-handler'     => 'session.configuration.html#ini.session.serialize-handler',
+            'session.gc-probability'        => 'session.configuration.html#ini.session.gc-probability',
+            'session.gc-divisor'            => 'session.configuration.html#ini.session.gc-divisor',
+            'session.gc-maxlifetime'        => 'session.configuration.html#ini.session.gc-maxlifetime',
+            'session.bug-compat-42'         => 'session.configuration.html#ini.session.bug-compat-42',
+            'session.bug-compat-warn'       => 'session.configuration.html#ini.session.bug-compat-warn',
+            'session.referer-check'         => 'session.configuration.html#ini.session.referer-check',
+            'session.entropy-length'        => 'session.configuration.html#ini.session.entropy-length',
+            'session.entropy-file'          => 'session.configuration.html#ini.session.entropy-file',
+            'session.cache-limiter'         => 'session.configuration.html#ini.session.cache-limiter',
+            'session.cache-expire'          => 'session.configuration.html#ini.session.cache-expire',
+            'session.use-trans-sid'         => 'session.configuration.html#ini.session.use-trans-sid',
+            'session.hash-function'         => 'session.configuration.html#ini.session.hash-function',
+            'session.hash-bits-per-character'=> 'session.configuration.html#ini.session.hash-bits-per-character',
+            'url-rewriter.tags'             => 'session.configuration.html#ini.url-rewriter.tags',
+            'assert.active'                 => 'info.configuration.html#ini.assert.active',
+            'assert.warning'                => 'info.configuration.html#ini.assert.warning',
+            'assert.bail'                   => 'info.configuration.html#ini.assert.bail',
+            'assert.callback'               => 'info.configuration.html#ini.assert.callback',
+            'assert.quiet-eval'             => 'info.configuration.html#ini.assert.quiet-eval',
+            'zend.enable-gc'                => 'info.configuration.html#ini.zend.enable-gc',
+            'com.typelib-file'              => 'com.configuration.html#ini.com.typelib-file',
+            'com.allow-dcom'                => 'com.configuration.html#ini.com.allow-dcom',
+            'com.autoregister-typelib'      => 'com.configuration.html#ini.com.autoregister-typelib',
+            'com.autoregister-casesensitive'=> 'com.configuration.html#ini.com.autoregister-casesensitive',
+            'com.autoregister-verbose'      => 'com.configuration.html#ini.com.autoregister-verbose',
+            'mbstring.language'             => 'mbstring.configuration.html#ini.mbstring.language',
+            'mbstring.internal-encoding'    => 'mbstring.configuration.html#ini.mbstring.internal-encoding',
+            'mbstring.http-input'           => 'mbstring.configuration.html#ini.mbstring.http-input',
+            'mbstring.http-output'          => 'mbstring.configuration.html#ini.mbstring.http-output',
+            'mbstring.encoding-translation' => 'mbstring.configuration.html#ini.mbstring.encoding-translation',
+            'mbstring.detect-order'         => 'mbstring.configuration.html#ini.mbstring.detect-order',
+            'mbstring.substitute-character' => 'mbstring.configuration.html#ini.mbstring.substitute-character',
+            'mbstring.func-overload'        => 'mbstring.configuration.html#ini.mbstring.func-overload',
+            'gd.jpeg-ignore-warning'        => 'image.configuration.html#ini.image.jpeg-ignore-warning',
+            'exif.encode-unicode'           => 'exif.configuration.html#ini.exif.encode-unicode',
+            'exif.decode-unicode-motorola'  => 'exif.configuration.html#ini.exif.decode-unicode-motorola',
+            'exif.decode-unicode-intel'     => 'exif.configuration.html#ini.exif.decode-unicode-intel',
+            'exif.encode-jis'               => 'exif.configuration.html#ini.exif.encode-jis',
+            'exif.decode-jis-motorola'      => 'exif.configuration.html#ini.exif.decode-jis-motorola',
+            'exif.decode-jis-intel'         => 'exif.configuration.html#ini.exif.decode-jis-intel',
+            'tidy.default-config'           => 'tidy.configuration.html#ini.tidy.default-config',
+            'tidy.clean-output'             => 'tidy.configuration.html#ini.tidy.clean-output',
+            'soap.wsdl-cache-enabled'       => 'soap.configuration.html#ini.soap.wsdl-cache-enabled',
+            'soap.wsdl-cache-dir'           => 'soap.configuration.html#ini.soap.wsdl-cache-dir',
+            'soap.wsdl-cache-ttl'           => 'soap.configuration.html#ini.soap.wsdl-cache-ttl',
+        );
+        return isset($inis[$ini]) ? $inis[$ini] : false;
+    }
+
+    public function is_known_variable($variable) {
+        $variables = array(
+            // Variables
+            'globals'       => 'reserved.variables.globals.html',
+            '-server'       => 'reserved.variables.server.html',
+            '-get'          => 'reserved.variables.get.html',
+            '-post'         => 'reserved.variables.post.html',
+            '-files'        => 'reserved.variables.files.html',
+            '-request'      => 'reserved.variables.request.html',
+            '-session'      => 'reserved.variables.session.html',
+            '-cookie'       => 'reserved.variables.cookies.html',
+            '-env'          => 'reserved.variables.environment.html',
+            'this'          => 'language.oop5.basic.html',
+            'php-errormsg'  => 'reserved.variables.phperrormsg.html',
+            'argv'          => 'reserved.variables.argv.html',
+            'argc'          => 'reserved.variables.argc.html',
+            'http-raw-post-data'    => 'reserved.variables.httprawpostdata.html',
+            'http-response-header'  => 'reserved.variables.httpresponseheader.html',
+            'http-server-vars'      => 'reserved.variables.server.html',
+            'http-get-vars'         => 'reserved.variables.get.html',
+            'http-post-vars'        => 'reserved.variables.post.html',
+            'http-session-vars'     => 'reserved.variables.session.html',
+            'http-post-files'       => 'reserved.variables.files.html',
+            'http-cookie-vars'      => 'reserved.variables.cookies.html',
+            'http-env-vars'         => 'reserved.variables.env.html',
+        );
+
+        if ($variable[0] === '$') {
+            $variable = ltrim($variable, '$');
+        }
+
+        return isset($variables[$variable]) ? $variables[$variable] : false;
+    }
+
+    public function is_known_term ($term) {
+        $terms = array(
+            '<>'            => 'language.operators.comparison.html',
+            '=='            => 'language.operators.comparison.html',
+            '==='           => 'language.operators.comparison.html',
+            '@'             => 'language.operators.errorcontrol.html',
+            'apache'        => 'install.html',
+            'array'         => 'language.types.array.html',
+            'arrays'        => 'language.types.array.html',
+            'case'          => 'control-structures.switch.html',
+            'catch'         => 'language.exceptions.html',
+            'checkbox'      => 'faq.html.html',
+            'class'         => 'language.oop5.basic.html',
+            'classes'       => 'language.oop5.basic.html',
+            'closures'      => 'functions.anonymous.html',
+            'cookie'        => 'features.cookies.html',
+            'date'          => 'function.date.html',
+            'exception'     => 'language.exceptions.html',
+            'extends'       => 'keyword.extends.html',
+            'file'          => 'function.file.html',
+            'fopen'         => 'function.fopen.html',
+            'for'           => 'control-structures.for.html',
+            'foreach'       => 'control-structures.foreach.html',
+            'form'          => 'language.variables.external.html',
+            'forms'         => 'language.variables.external.html',
+            'function'      => 'language.functions.html',
+            'gd'            => 'book.image.html',
+            'get'           => 'reserved.variables.get.html',
+            'global'        => 'language.variables.scope.html',
+            'globals'       => 'language.variables.scope.html',
+            'header'        => 'function.header.html',
+            'heredoc'       => 'language.types.string.html#language.types.string.syntax.heredoc',
+            'nowdoc'        => 'language.types.string.html#language.types.string.syntax.nowdoc',
+            'htaccess'      => 'configuration.file.html',
+            'if'            => 'control-structures.if.html',
+            'include'       => 'function.include.html',
+            'int'           => 'language.types.integer.html',
+            'ip'            => 'reserved.variables.server.html',
+            'location'      => 'function.header.html',
+            'mail'          => 'function.mail.html',
+            'modulo'        => 'language.operators.arithmetic.html',
+            'mysql'         => 'book.mysql.html',
+            'new'           => 'language.oop5.basic.html#language.oop5.basic.new',
+            'null'          => 'language.types.null.html',
+            'object'        => 'language.types.object.html',
+            'operator'      => 'language.operators.html',
+            'operators'     => 'language.operators.html',
+            'or'            => 'language.operators.logical.html',
+            'php.ini'       => 'configuration.file.html',
+            'php-mysql.dll' => 'book.mysql.html',
+            'php-self'      => 'reserved.variables.server.html',
+            'query-string'  => 'reserved.variables.server.html',
+            'redirect'      => 'function.header.html',
+            'reference'     => 'index.html',
+            'referer'       => 'reserved.variables.server.html',
+            'referrer'      => 'reserved.variables.server.html',
+            'remote-addr'   => 'reserved.variables.server.html',
+            'request'       => 'reserved.variables.request.html',
+            'session'       => 'features.sessions.html',
+            'smtp'          => 'book.mail.html',
+            'ssl'           => 'book.openssl.html',
+            'static'        => 'language.oop5.static.html',
+            'stdin'         => 'wrappers.php.html',
+            'string'        => 'language.types.string.html',
+            'superglobal'   => 'language.variables.superglobals.html',
+            'superglobals'  => 'language.variables.superglobals.html',
+            'switch'        => 'control-structures.switch.html',
+            'timestamp'     => 'function.time.html',
+            'try'           => 'language.exceptions.html',
+            'upload'        => 'features.file-upload.html',
+        );
+        return isset($terms[$term]) ? $terms[$term] : false;
+    }
+}
+

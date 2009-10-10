@@ -1,0 +1,16 @@
+#!@php_bin@
+<?php
+/**
+#!/usr/bin/env php
+ *  phpdoc
+ *
+ *  @package    PHP_PHPDoc
+ *  @author     sotarok
+ *  @license    The MIT License
+ *  @id         $Id$
+ */
+
+require_once 'phpman.php';
+
+phpman::run($argv);
+
