@@ -4,7 +4,7 @@
 #!/usr/bin/env php
  *  phpdoc
  *
- *  @package    PHP_PHPDoc
+ *  @package    phpman
  *  @author     sotarok
  *  @license    The MIT License
  *  @id         $Id$

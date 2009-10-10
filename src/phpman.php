@@ -17,18 +17,25 @@ class phpman
 {
     public $pear_config;
     public $base_dir;
-    public $browser;
+
+    public $browser_cmd = null;
+    public $browser = 'w3m';
+    public $browser_option = array(
+        'w3m' => '-T "text/html"',
+    );
 
     protected $_pages = null;
 
-    public function __construct()
+    public function __construct($browser = 'w3m')
     {
         $this->pear_config = &PEAR_Config::singleton();
         $this->base_dir = $this->pear_config->get('data_dir') . '/phpman/html/';
 
-        exec("which w3m", $output, $status);
+        exec('which ' . $browser, $output, $status);
         !$status or die("w3m does not installed!\n");
-        $this->browser = trim($output[0]);
+
+        $this->browser = $browser;
+        $this->browser_cmd = trim($output[0]);
     }
 
     public static function run($args)
@@ -38,7 +45,7 @@ class phpman
         $page_html = null;
         try {
             $page = $o->parseArgs($args);
-            $w = popen($o->browser . " -T 'text/html' $page", 'w');
+            $w = popen(join(" ", array($o->browser_cmd, $o->browser_option[$o->browser], $page,)), 'w');
             pclose($w);
         } catch (Exception $e) {
             if ($e->getCode() == E_PHPMAN_NOTFOUND) {
@@ -55,11 +62,11 @@ EOT;
                     $page_html .= '<li><a href="' . $p . '">' . basename($p) . '</a></li>';
                 }
                 $page_html .= '</ul>';
-            }
 
-            $w = popen($o->browser . " -T text/html", "w");
-            fwrite($w, $page_html);
-            pclose($w);
+                $w = popen(join(" ", array($o->browser_cmd, $o->browser_option[$o->browser],)), "w");
+                fwrite($w, $page_html);
+                pclose($w);
+            }
         }
     }
 
@@ -109,149 +116,128 @@ EOT;
         // ============================================================================
         // Define shortcuts for PHP files, manual pages and external redirects
         $uri_aliases = array (
-            # PHP page shortcuts
-            "download"      => "downloads",
-            "getphp"        => "downloads",
-            "getdocs"       => "download-docs",
-            "documentation" => "docs",
-            "mailinglists"  => "mailing-lists",
-            "mailinglist"   => "mailing-lists",
-            "changelog"     => "ChangeLog-5",
-            "gethelp"       => "support",
-            "help"          => "support",
-            "unsubscribe"   => "unsub",
-            "subscribe"     => "mailing-lists",
-            "logos"         => "download-logos",
-
             # manual shortcuts
-            "intro"        => "introduction",
-            "whatis"       => "introduction",
-            "whatisphp"    => "introduction",
-            "what_is_php"  => "introduction",
+            "intro"        => "introduction.html",
+            "whatis"       => "introduction.html",
+            "whatisphp"    => "introduction.html",
+            "what_is_php"  => "introduction.html",
 
-            "windows"      => "install.windows",
-            "win32"        => "install.windows",
+            "windows"      => "install.windows.html",
+            "win32"        => "install.windows.html",
 
-            "globals"          => "language.variables.predefined",
-            "register_globals" => "security.globals",
-            "registerglobals"  => "security.globals",
-            "manual/en/security.registerglobals.php" => "security.globals", // fix for 4.3.8 configure
-            "magic_quotes"     => "security.magicquotes",
-            "magicquotes"      => "security.magicquotes",
-            "gd"               => "image",
+            "globals"          => "language.variables.predefined.html",
+            "register_globals" => "security.globals.html",
+            "registerglobals"  => "security.globals.html",
+            "manual/en/security.registerglobals.php" => "security.globals.html", // fix for 4.3.8 configure
+            "magic_quotes"     => "security.magicquotes.html",
+            "magicquotes"      => "security.magicquotes.html",
+            "gd"               => "image.html",
             'streams'          => 'book.stream',
 
-            "callback"     => "language.pseudo-types",
-            "number"       => "language.pseudo-types",
-            "mixed"        => "language.pseudo-types",
-            "bool"         => "language.types.boolean",
-            "boolean"      => "language.types.boolean",
-            "int"          => "language.types.integer",
-            "integer"      => "language.types.integer",
-            "float"        => "language.types.float",
-            "string"       => "language.types.string",
-            "heredoc"      => "language.types.string",
-            "<<<"          => "language.types.string",
-            "object"       => "language.types.object",
-            "null"         => "language.types.null",
+            "callback"     => "language.pseudo-types.html",
+            "number"       => "language.pseudo-types.html",
+            "mixed"        => "language.pseudo-types.html",
+            "bool"         => "language.types.boolean.html",
+            "boolean"      => "language.types.boolean.html",
+            "int"          => "language.types.integer.html",
+            "integer"      => "language.types.integer.html",
+            "float"        => "language.types.float.html",
+            "string"       => "language.types.string.html",
+            "heredoc"      => "language.types.string.html",
+            "<<<"          => "language.types.string.html",
+            "object"       => "language.types.object.html",
+            "null"         => "language.types.null.html",
 
-            "htaccess"     => "configuration.changes",
-            "php_value"    => "configuration.changes",
+            "htaccess"     => "configuration.changes.html",
+            "php_value"    => "configuration.changes.html",
 
-            "ternary"      => "language.operators.comparison",
-            "instanceof"   => "language.operators.type",
-            "if"           => "language.control-structures",
-            "static"       => "language.variables.scope",
-            "global"       => "language.variables.scope",
-            "@"            => "language.operators.errorcontrol",
-            "&"            => "language.references",
+            "ternary"      => "language.operators.comparison.html",
+            "instanceof"   => "language.operators.type.html",
+            "if"           => "language.control-structures.html",
+            "static"       => "language.variables.scope.html",
+            "global"       => "language.variables.scope.html",
+            "@"            => "language.operators.errorcontrol.html",
+            "&"            => "language.references.html",
 
-            "tut"          => "tutorial",
-            "tut.php"      => "tutorial", // BC
+            "tut"          => "tutorial.html",
+            "tut.php"      => "tutorial.html", // BC
 
-            "faq.php"      => "faq",      // BC
-            "bugs.php"     => "bugs",     // BC
-            "bugstats.php" => "bugstats", // BC
-            "docs-echm.php"=> "download-docs", // BC
+            "faq.php"      => "faq.html",      // BC
+            "bugs.php"     => "bugs.html",     // BC
+            "bugstats.php" => "bugstats.html", // BC
+            "docs-echm.php"=> "download-docs.html", // BC
 
-            "odbc"         => "uodbc", // BC
-            "oracle"       => "oci8",
-            "_"            => "function.gettext",
-            "cli"          => "features.commandline",
+            "odbc"         => "uodbc.html", // BC
+            "oracle"       => "oci8.html",
+            "_"            => "function.gettext.html",
+            "cli"          => "features.commandline.html",
 
-            "oop4"         => "language.oop",
-            "oop"          => "language.oop5",
+            "oop4"         => "language.oop.html",
+            "oop"          => "language.oop5.html",
 
-            "class"        => "language.oop5.basic",
-            "new"          => "language.oop5.basic",
-            "extends"      => "language.oop5.basic",
-            "clone"        => "language.oop5.cloning",
-            "construct"    => "language.oop5.decon",
-            "destruct"     => "language.oop5.decon",
-            "public"       => "language.oop5.visibility",
-            "private"      => "language.oop5.visibility",
-            "protected"    => "language.oop5.visibility",
-            "abstract"     => "language.oop5.abstract",
-            "interface"    => "language.oop5.interfaces",
-            "interfaces"   => "language.oop5.interfaces",
-            "autoload"     => "language.oop5.autoload",
-            "__autoload"   => "language.oop5.autoload",
-            "language.oop5.reflection" => "book.reflection", // BC
-            "::"           => "language.oop5.paamayim-nekudotayim",
+            "class"        => "language.oop5.basic.html",
+            "new"          => "language.oop5.basic.html",
+            "extends"      => "language.oop5.basic.html",
+            "clone"        => "language.oop5.cloning.html",
+            "construct"    => "language.oop5.decon.html",
+            "destruct"     => "language.oop5.decon.html",
+            "public"       => "language.oop5.visibility.html",
+            "private"      => "language.oop5.visibility.html",
+            "protected"    => "language.oop5.visibility.html",
+            "abstract"     => "language.oop5.abstract.html",
+            "interface"    => "language.oop5.interfaces.html",
+            "interfaces"   => "language.oop5.interfaces.html",
+            "autoload"     => "language.oop5.autoload.html",
+            "__autoload"   => "language.oop5.autoload.html",
+            "language.oop5.reflection" => "book.reflection.html", // BC
+            "::"           => "language.oop5.paamayim-nekudotayim.html",
 
-            "__construct"  => "language.oop5.decon",
-            "__destruct"   => "language.oop5.decon",
-            "__call"       => "language.oop5.overloading",
-            "__callstatic" => "language.oop5.overloading",
-            "__get"        => "language.oop5.overloading",
-            "__set"        => "language.oop5.overloading",
-            "__isset"      => "language.oop5.overloading",
-            "__unset"      => "language.oop5.overloading",
-            "__sleep"      => "language.oop5.magic",
-            "__wakeup"     => "language.oop5.magic",
-            "__tostring"   => "language.oop5.magic",
-            "__set_state"  => "language.oop5.magic",
-            "__clone"      => "language.oop5.cloning",
+            "__construct"  => "language.oop5.decon.html",
+            "__destruct"   => "language.oop5.decon.html",
+            "__call"       => "language.oop5.overloading.html",
+            "__callstatic" => "language.oop5.overloading.html",
+            "__get"        => "language.oop5.overloading.html",
+            "__set"        => "language.oop5.overloading.html",
+            "__isset"      => "language.oop5.overloading.html",
+            "__unset"      => "language.oop5.overloading.html",
+            "__sleep"      => "language.oop5.magic.html",
+            "__wakeup"     => "language.oop5.magic.html",
+            "__tostring"   => "language.oop5.magic.html",
+            "__set_state"  => "language.oop5.magic.html",
+            "__clone"      => "language.oop5.cloning.html",
 
-            "throw"        => "language.exceptions",
-            "try"          => "language.exceptions",
-            "catch"        => "language.exceptions",
-            "lsb"          => "language.oop5.late-static-bindings",
-            "namespace"    => "language.namespaces",
-            "use"          => "language.namespaces.using",
-            "iterator"     => "language.oop5.iterations",
+            "throw"        => "language.exceptions.html",
+            "try"          => "language.exceptions.html",
+            "catch"        => "language.exceptions.html",
+            "lsb"          => "language.oop5.late-static-bindings.html",
+            "namespace"    => "language.namespaces.html",
+            "use"          => "language.namespaces.using.html",
+            "iterator"     => "language.oop5.iterations.html",
 
-            "factory"      => "language.oop5.patterns",
-            "singleton"    => "language.oop5.patterns",
+            "factory"      => "language.oop5.patterns.html",
+            "singleton"    => "language.oop5.patterns.html",
 
-            "news.php"                     => "archive/index", // BC
-            "readme.mirror"                => "mirroring", // BC
+            "news.php"                     => "archive/index.html", // BC
+            "readme.mirror"                => "mirroring.html", // BC
 
-            "php5"                         => "language.oop5",
-            "zend_changes.txt"             => "language.oop5", // BC
-            "zend2_example.phps"           => "language.oop5", // BC
-            "zend_changes_php_5_0_0b2.txt" => "language.oop5", // BC
-            "zend-engine-2"                => "language.oop5", // BC
-            "zend-engine-2.php"            => "language.oop5", // BC
+            "php5"                         => "language.oop5.html",
+            "zend_changes.txt"             => "language.oop5.html", // BC
+            "zend2_example.phps"           => "language.oop5.html", // BC
+            "zend_changes_php_5_0_0b2.txt" => "language.oop5.html", // BC
+            "zend-engine-2"                => "language.oop5.html", // BC
+            "zend-engine-2.php"            => "language.oop5.html", // BC
 
-            "news_php_5_0_0b2.txt"         => "ChangeLog-5", // BC
-            "news_php_5_0_0b3.txt"         => "ChangeLog-5", // BC
+            "news_php_5_0_0b2.txt"         => "ChangeLog-5.html", // BC
+            "news_php_5_0_0b3.txt"         => "ChangeLog-5.html", // BC
 
-            "manual/about-notes.php" => "manual/add-note",   // BC
-            "software/index.php"     => "software",          // BC
-            "releases.php"           => "releases/index",    // BC
+            "manual/about-notes.php" => "manual/add-note.html",   // BC
+            "software/index.php"     => "software.html",          // BC
+            "releases.php"           => "releases/index.html",    // BC
 
-            "update_5_2.txt"         => "migration52",      // BC
-            "readme_upgrade_51.php"  => "migration51",      // BC
-            "internals"              => "internals2",        // BC
+            "update_5_2.txt"         => "migration52.html",      // BC
+            "readme_upgrade_51.php"  => "migration51.html",      // BC
+            "internals"              => "internals2.html",        // BC
 
-            # external shortcut aliases ;)
-            "dochowto"     => "phpdochowto",
-            "projects.php" => "projects", // BC
-
-            # CVS -> SVN
-            "anoncvs.php"   => "svn",
-            "cvs-php.php"   => "svn-php",
         );
 
 
