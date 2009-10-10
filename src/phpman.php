@@ -32,7 +32,7 @@ class phpman
         $this->base_dir = $this->pear_config->get('data_dir') . '/phpman/html/';
 
         exec('which ' . $browser, $output, $status);
-        !$status or die("w3m does not installed!\n");
+        !$status or die("$browser does not installed!\n");
 
         $this->browser = $browser;
         $this->browser_cmd = trim($output[0]);
