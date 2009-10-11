@@ -31,7 +31,10 @@ class phpman_Command
                     case '-s':
                     case '--sync':
                         try {
-                            $this->sync();
+                            $lang = $this->prompt('Your language? (choose from: http://php.net/download-docs.php)', 'ja');
+                            $mirror = $this->prompt('Mirror site?', 'www.php.net');
+
+                            $this->sync(compact('lang', 'mirror'));
                         } catch (Exception $e) {
                             self::outputln($e->getMessage());
                             exit(1);
@@ -55,7 +58,7 @@ class phpman_Command
         return $param;
     }
 
-    public function sync()
+    public function sync($options = array('lang' => 'ja', 'mirror' => 'www.php.net',))
     {
         /****
          * download configuration
@@ -66,11 +69,11 @@ class phpman_Command
 
         $download_dir = $config->get('download_dir');
         $data_dir = $config->get('data_dir') . '/phpman/';
+        if (!is_writable($download_dir)) {
+            throw new Exception("Error: You cannot write the directory (maybe permission error? try with root or sodo): $download_dir");
+        }
 
-        $lang = $this->prompt('Your language? (choose from: http://php.net/download-docs.php)', 'ja');
-        $mirror = $this->prompt('Mirror site?', 'www.php.net');
-
-        $file_url = 'http://' . $mirror . '/get/php_manual_' . $lang . '.tar.gz/from/this/mirror';
+        $file_url = 'http://' . $options['mirror'] . '/get/php_manual_' . $options['lang'] . '.tar.gz/from/this/mirror';
 
         self::outputln("Request $file_url ...");
 
@@ -82,7 +85,7 @@ class phpman_Command
         $response = $this->download($file_url);
         $file = $download_dir . DIRECTORY_SEPARATOR . $response['filename'];
         if (false === file_put_contents($file, $response['response']->getBody())) {
-            throw new Exception("failed to save file: $file");
+            throw new Exception("Error: failed to save file: $file");
         }
 
         self::outputln('Complete to download manual file.');
@@ -94,7 +97,7 @@ class phpman_Command
 
         $tar = new Archive_Tar($file);
         if (!$tar->extract($data_dir)) {
-            throw new Exception("failed to extract file: $file");
+            throw new Exception("Error: failed to extract file: $file");
         }
 
         self::outputln('Complete to extract manual files.');

@@ -23,6 +23,7 @@ class phpman
     public $browser = 'w3m';
     public $browser_option = array(
         'w3m' => '-T "text/html"',
+        //'lynx' => '',
     );
 
     protected $_pages = null;
@@ -81,7 +82,7 @@ EOT;
         }
         else if (is_array($page)) {
             $this->_pages = $page;
-            throw new Exception("Page not found.", E_PHPMAN_MULTIPAGES);
+            throw new Exception("Multiple pages found.", E_PHPMAN_MULTIPAGES);
         }
 
         return $this->base_dir . $page;

@@ -5,6 +5,8 @@
  * @author      sotarok
  */
 
+require_once 'phpman/Command.php';
+
 class phpman_Setup_postinstall
 {
     /**
@@ -20,6 +22,7 @@ class phpman_Setup_postinstall
     {
         $this->_config = &$config;
         $this->_ui = &PEAR_Frontend::singleton();
+        $this->command = new phpman_Command();
 
         return true;
     }
@@ -34,30 +37,15 @@ class phpman_Setup_postinstall
         if ($param_group == 'downloadhtml') {
             $mirror          = $options['mirror'];
             $lang            = $options['lang'];
-            $download_dir    = $this->_config->get('download_dir');
-            $data_dir_phpman = $this->_config->get('data_dir') . '/phpman/';
-            //$tmp_download_file = $download_dir . '/php_manual.tar.gz';
-            $file_url = 'http://' . $mirror . '/get/php_manual_' . $lang . '.tar.gz/from/this/mirror';
 
-
-            require_once 'PEAR/Downloader.php';
-            require_once 'Archive/Tar.php';
-
-            $downloader = new PEAR_Downloader($this->_ui, array(), $this->_config);
-            $file = $downloader->downloadHttp($file_url,  $this->_ui, $download_dir);
-            if (PEAR::isError($file)) {
-                $this->_ui->outputData('failed to download manual file: ' . $file_url);
-                return false;
+            try {
+                $this->command->sync(compact('lang', 'mirror'));
             }
-            $this->_ui->outputData('Complete to download manual file.');
-
-            $tar = new Archive_Tar($file);
-            if (!$tar->extract($data_dir_phpman)) {
-                $this->_ui->outputData('failed to extract file: ' . $file);
+            catch (Exception $e) {
+                $this->_ui->outputData($e->getMessage());
                 return false;
             }
 
-            $this->_ui->outputData('Complete to extract manual files.');
             return true;
         }
         return false;
