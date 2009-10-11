@@ -17,34 +17,39 @@ class phpman_Command
      */
     public function parseArgs($args)
     {
-        #TODO: refactoring this method
         $this->_command = array_shift($args);
 
-        while (!empty($args) && $arg = array_shift($args)) {
-          if (strpos($arg, '-') === 0) {
-            switch ($arg) {
-              case '-s':
-              case '--sync':
-                  try {
-                      $this->sync();
-                  } catch (Exception $e) {
-                      self::outputln($e->getMessage());
-                      exit(1);
-                  }
-                  exit(0);
-              case '-h':
-              case '--help':
-                  $this->usage();
-                  exit(0);
-              default:
-                  break;
+        if (empty($args)) {
+            $this->usage();
+            exit(0);
+        }
+
+        $params = '';
+        while ($arg = array_shift($args)) {
+            if (strpos($arg, '-') === 0) {
+                switch ($arg) {
+                    case '-s':
+                    case '--sync':
+                        try {
+                            $this->sync();
+                        } catch (Exception $e) {
+                            self::outputln($e->getMessage());
+                            exit(1);
+                        }
+                        exit(0);
+                    case '-h':
+                    case '--help':
+                        $this->usage();
+                        exit(0);
+                    default:
+                        break;
+                }
+            } else {
+                if (isset($param)) {
+                    throw new Exception("Parameter too match!");
+                }
+                $param = $arg;
             }
-          } else {
-            if (isset($param)) {
-              throw new Exception("Parameter too match!");
-            }
-            $param = $arg;
-          }
         }
 
         return $param;
@@ -89,7 +94,7 @@ class phpman_Command
 
         $tar = new Archive_Tar($file);
         if (!$tar->extract($data_dir)) {
-          throw new Exception("failed to extract file: $file");
+            throw new Exception("failed to extract file: $file");
         }
 
         self::outputln('Complete to extract manual files.');
@@ -150,8 +155,8 @@ class phpman_Command
         $result = trim(fgets(STDIN));
 
         if (!empty($other_params) && !in_array($result ,$other_params)) {
-          #TODO: FIX Policy. Now, return default Value at Miss Selected.
-          $result = $default;
+            #TODO: FIX Policy. Now, return default Value at Miss Selected.
+            $result = $default;
         }
 
         return empty($result) ? $default : $result;
