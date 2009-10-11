@@ -70,6 +70,8 @@ EOT;
                 $w = popen(join(" ", array($o->browser_cmd, $o->browser_option[$o->browser],)), "w");
                 fwrite($w, $page_html);
                 pclose($w);
+            } else {
+                echo $e->getMessage(), "\n";
             }
         }
     }

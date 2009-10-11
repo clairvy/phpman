@@ -24,7 +24,6 @@ class phpman_Command
             exit(0);
         }
 
-        $params = '';
         while ($arg = array_shift($args)) {
             if (strpos($arg, '-') === 0) {
                 switch ($arg) {
