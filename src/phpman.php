@@ -244,15 +244,21 @@ EOT;
         }
 
         // lookup files
-        $filename  = 'function.' . $term . '.html';
-        if (file_exists($this->base_dir . $filename)) {
-            return $filename;
+        foreach (array(
+            'function',
+            'class',
+            'book',
+            '',
+        ) as $prefix) {
+            if ($filename = $this->searchPrefix($prefix, $term)) {
+                return $filename;
+            }
         }
 
         $files = glob($this->base_dir . '*' . $term . '*.html');
         if (!empty($files)) {
             if (count($files) == 1) {
-                return array_shift($files);
+                return basename(array_shift($files));
             }
             else {
                 return $files;
@@ -260,6 +266,17 @@ EOT;
         }
 
         return null;
+    }
+
+    public function searchPrefix ($prefix, $term)
+    {
+        $filename  = $prefix . (empty($prefix) ? '' : '.') . $term . '.html';
+        if (file_exists($this->base_dir . $filename)) {
+            return $filename;
+        }
+        else {
+            return false;
+        }
     }
 
     public function is_known_ini ($ini) {
