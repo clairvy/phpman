@@ -9,6 +9,7 @@
  */
 
 require_once 'PEAR/Config.php';
+require_once 'phpman/Command.php';
 
 define('E_PHPMAN_NOTFOUND', 1 << 1);
 define('E_PHPMAN_MULTIPAGES', 1 << 2);
@@ -41,10 +42,12 @@ class phpman
     public static function run($args)
     {
         $o = new phpman();
+        $com = new phpman_Command();
 
         $page_html = null;
         try {
-            $page = $o->parseArgs($args);
+            $filename = $com->parseArgs($args);
+            $page = $o->findBrowsePage($filename);
             $w = popen(join(" ", array($o->browser_cmd, $o->browser_option[$o->browser], $page,)), 'w');
             pclose($w);
         } catch (Exception $e) {
@@ -70,21 +73,15 @@ EOT;
         }
     }
 
-    public function parseArgs($args)
+    public function findBrowsePage($arg)
     {
-        $page = 'index.html';
-
-        array_shift($args);
-        if (!empty($args)) {
-            $arg = array_shift($args);
-            $page = $this->searchPage($arg);
-            if ($page === null) {
-                throw new Exception("Page not found.", E_PHPMAN_NOTFOUND);
-            }
-            else if (is_array($page)) {
-                $this->_pages = $page;
-                throw new Exception("Page not found.", E_PHPMAN_MULTIPAGES);
-            }
+        $page = $this->searchPage($arg);
+        if ($page === null) {
+            throw new Exception("Page not found.", E_PHPMAN_NOTFOUND);
+        }
+        else if (is_array($page)) {
+            $this->_pages = $page;
+            throw new Exception("Page not found.", E_PHPMAN_MULTIPAGES);
         }
 
         return $this->base_dir . $page;
