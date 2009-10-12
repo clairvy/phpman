@@ -1,4 +1,6 @@
 <?php
+/* vim: set expandtab tabstop=4 shiftwidth=4: */
+
 /**
  * phpman_Command 
  * 
@@ -48,7 +50,7 @@ class phpman_Command
                 }
             } else {
                 if (isset($param)) {
-                    throw new Exception("Parameter too match!");
+                    throw new Exception("Parameter too much!");
                 }
                 $param = $arg;
             }
@@ -79,13 +81,8 @@ class phpman_Command
         /****
          * get Manual Tarball
          ****/
-        require_once 'HTTP/Request2.php';
-
-        $response = $this->download($file_url);
-        $file = $download_dir . DIRECTORY_SEPARATOR . $response['filename'];
-        if (false === file_put_contents($file, $response['response']->getBody())) {
-            throw new Exception("Error: failed to save file: $file");
-        }
+        require_once 'Download.php';
+        $file = phpman_Download::connect($file_url)->save($download_dir);
 
         self::outputln('Complete to download manual file.');
 
